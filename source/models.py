@@ -1,4 +1,4 @@
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold, StratifiedShuffleSplit
 from sklearn.metrics import roc_auc_score
 from sklearn.base import clone
 import seaborn as sns
@@ -6,6 +6,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import gc
+
+import lightgbm as lgbm
+import xgboost as xgb
+from catboost import CatBoostClassifier
+
 
 
 # Display/plot feature importance
@@ -20,7 +25,7 @@ def display_importances(feature_importance_df_):
 
 
 # LightGBM GBDT with KFold or Stratified KFold
-def kfold_model(model, X_train, y_train, X_test, n_folds, stratified = False, debug= False):
+def kfold_model(model, model_type, X_train, y_train, X_test, n_folds, stratified = False, debug= False):
 
     # Cross validation model
     if stratified:
@@ -39,12 +44,17 @@ def kfold_model(model, X_train, y_train, X_test, n_folds, stratified = False, de
         valid_x, valid_y = X_train[feats].iloc[valid_idx], y_train.iloc[valid_idx]
         
         clf = clone(model)
-
-        clf.fit(train_x, train_y, eval_set=[(train_x, train_y), (valid_x, valid_y)], 
-            eval_metric= 'auc', verbose= 100, early_stopping_rounds= 200)
-
-        oof_preds[valid_idx] = clf.predict_proba(valid_x, num_iteration=clf.best_iteration_)[:, 1]
-        sub_preds += clf.predict_proba(X_test[feats], num_iteration=clf.best_iteration_)[:, 1] / folds.n_splits
+        
+        if model_type == 'lightgbm':
+            clf.fit(train_x, train_y, eval_set=[(train_x, train_y), (valid_x, valid_y)], 
+                eval_metric= 'auc', verbose= 100, early_stopping_rounds= 200)
+            oof_preds[valid_idx] = clf.predict_proba(valid_x, num_iteration=clf.best_iteration_)[:, 1]
+            sub_preds += clf.predict_proba(X_test[feats], num_iteration=clf.best_iteration_)[:, 1] / folds.n_splits
+        elif model_type == 'xgboost':
+            clf.fit(train_x, train_y, eval_set=[(train_x, train_y), (valid_x, valid_y)], 
+                eval_metric= 'auc', verbose= 100, early_stopping_rounds= 200)
+            oof_preds[valid_idx] = clf.predict_proba(valid_x)[:, 1]
+            sub_preds += clf.predict_proba(X_test[feats])[:, 1] / folds.n_splits
 
         fold_importance_df = pd.DataFrame()
         fold_importance_df["feature"] = feats

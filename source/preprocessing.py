@@ -121,12 +121,8 @@ def application_train_test(dataDir, nan_as_category = False):
 
     df['NEW_CREDIT_TO_ANNUITY_RATIO'] = df['AMT_CREDIT'] / df['AMT_ANNUITY']
     df['NEW_CREDIT_TO_GOODS_RATIO'] = df['AMT_CREDIT'] / df['AMT_GOODS_PRICE']
-    df['NEW_DOC_IND_AVG'] = df[docs].mean(axis=1)
-    df['NEW_DOC_IND_STD'] = df[docs].std(axis=1)
     df['NEW_DOC_IND_KURT'] = df[docs].kurtosis(axis=1)
     df['NEW_LIVE_IND_SUM'] = df[live].sum(axis=1)
-    df['NEW_LIVE_IND_STD'] = df[live].std(axis=1)
-    df['NEW_LIVE_IND_KURT'] = df[live].kurtosis(axis=1)
     df['NEW_INC_PER_CHLD'] = df['AMT_INCOME_TOTAL'] / (1 + df['CNT_CHILDREN'])
     df['NEW_INC_BY_ORG'] = df['ORGANIZATION_TYPE'].map(inc_by_org)
     df['NEW_EMPLOY_TO_BIRTH_RATIO'] = df['DAYS_EMPLOYED'] / df['DAYS_BIRTH']
@@ -138,7 +134,7 @@ def application_train_test(dataDir, nan_as_category = False):
     df['NEW_CAR_TO_BIRTH_RATIO'] = df['OWN_CAR_AGE'] / df['DAYS_BIRTH']
     df['NEW_CAR_TO_EMPLOY_RATIO'] = df['OWN_CAR_AGE'] / df['DAYS_EMPLOYED']
     df['NEW_PHONE_TO_BIRTH_RATIO'] = df['DAYS_LAST_PHONE_CHANGE'] / df['DAYS_BIRTH']
-    df['NEW_PHONE_TO_EMPLOY_RATIO'] = df['DAYS_LAST_PHONE_CHANGE'] / df['DAYS_EMPLOYED']
+    df['NEW_PHONE_TO_BIRTH_RATIO_EMPLOYER'] = df['DAYS_LAST_PHONE_CHANGE'] / df['DAYS_EMPLOYED']
     df['NEW_CREDIT_TO_INCOME_RATIO'] = df['AMT_CREDIT'] / df['AMT_INCOME_TOTAL']
     
     # Categorical features with Binary encode (0 or 1; two categories)
@@ -146,10 +142,18 @@ def application_train_test(dataDir, nan_as_category = False):
         df[bin_feature], uniques = pd.factorize(df[bin_feature])
     # Categorical features with One-Hot encode
     df, cat_cols = one_hot_encoder(df, nan_as_category)
-    
+    dropcolum=['FLAG_DOCUMENT_2','FLAG_DOCUMENT_4',
+    'FLAG_DOCUMENT_5','FLAG_DOCUMENT_6','FLAG_DOCUMENT_7',
+    'FLAG_DOCUMENT_8','FLAG_DOCUMENT_9','FLAG_DOCUMENT_10', 
+    'FLAG_DOCUMENT_11','FLAG_DOCUMENT_12','FLAG_DOCUMENT_13',
+    'FLAG_DOCUMENT_14','FLAG_DOCUMENT_15','FLAG_DOCUMENT_16',
+    'FLAG_DOCUMENT_17','FLAG_DOCUMENT_18','FLAG_DOCUMENT_19',
+    'FLAG_DOCUMENT_20','FLAG_DOCUMENT_21']
+    df= df.drop(dropcolum,axis=1)
     del test_df
     gc.collect()
     return df
+
 
 # Preprocess bureau.csv and bureau_balance.csv
 def bureau_and_balance(dataDir, nan_as_category = True):
@@ -171,20 +175,20 @@ def bureau_and_balance(dataDir, nan_as_category = True):
     
     # Bureau and bureau_balance numeric features
     num_aggregations = {
-        'DAYS_CREDIT': ['min', 'max', 'mean', 'std'],
-        'DAYS_CREDIT_ENDDATE': ['min', 'max', 'mean'],
+        'DAYS_CREDIT': [ 'mean', 'var'],
+        'DAYS_CREDIT_ENDDATE': [ 'mean'],
         'DAYS_CREDIT_UPDATE': ['mean'],
-        'CREDIT_DAY_OVERDUE': ['max', 'mean'],
+        'CREDIT_DAY_OVERDUE': ['mean'],
         'AMT_CREDIT_MAX_OVERDUE': ['mean'],
-        'AMT_CREDIT_SUM': ['max', 'mean', 'sum'],
-        'AMT_CREDIT_SUM_DEBT': ['max', 'mean', 'sum'],
-        'AMT_CREDIT_SUM_OVERDUE': ['mean', 'max'],
+        'AMT_CREDIT_SUM': [ 'mean', 'sum'],
+        'AMT_CREDIT_SUM_DEBT': [ 'mean', 'sum'],
+        'AMT_CREDIT_SUM_OVERDUE': ['mean'],
         'AMT_CREDIT_SUM_LIMIT': ['mean', 'sum'],
         'AMT_ANNUITY': ['max', 'mean'],
         'CNT_CREDIT_PROLONG': ['sum'],
         'MONTHS_BALANCE_MIN': ['min'],
         'MONTHS_BALANCE_MAX': ['max'],
-        'MONTHS_BALANCE_SIZE': ['mean', 'sum', 'std']
+        'MONTHS_BALANCE_SIZE': ['mean', 'sum']
     }
     # Bureau and bureau_balance categorical features
     cat_aggregations = {}
@@ -196,7 +200,6 @@ def bureau_and_balance(dataDir, nan_as_category = True):
     # Bureau: Active credits - using only numerical aggregations
     active = bureau[bureau['CREDIT_ACTIVE_Active'] == 1]
     active_agg = active.groupby('SK_ID_CURR').agg(num_aggregations)
-    cols = active_agg.columns.tolist()
     active_agg.columns = pd.Index(['ACTIVE_' + e[0] + "_" + e[1].upper() for e in active_agg.columns.tolist()])
     bureau_agg = bureau_agg.join(active_agg, how='left', on='SK_ID_CURR')
     del active, active_agg
@@ -206,13 +209,10 @@ def bureau_and_balance(dataDir, nan_as_category = True):
     closed_agg = closed.groupby('SK_ID_CURR').agg(num_aggregations)
     closed_agg.columns = pd.Index(['CLOSED_' + e[0] + "_" + e[1].upper() for e in closed_agg.columns.tolist()])
     bureau_agg = bureau_agg.join(closed_agg, how='left', on='SK_ID_CURR')
-    
-    for e in cols:
-        bureau_agg['NEW_RATIO_BURO_' + e[0] + "_" + e[1].upper()] = bureau_agg['ACTIVE_' + e[0] + "_" + e[1].upper()] /bureau_agg['CLOSED_' + e[0] + "_" + e[1].upper()]
-    
     del closed, closed_agg, bureau
     gc.collect()
     return bureau_agg
+
 
 # Preprocess previous_applications.csv
 def previous_applications(dataDir, nan_as_category = True):
@@ -228,16 +228,16 @@ def previous_applications(dataDir, nan_as_category = True):
     prev['APP_CREDIT_PERC'] = prev['AMT_APPLICATION'] / prev['AMT_CREDIT']
     # Previous applications numeric features
     num_aggregations = {
-        'AMT_ANNUITY': ['min', 'max', 'mean', 'std'],
-        'AMT_APPLICATION': ['min', 'max', 'mean', 'std'],
-        'AMT_CREDIT': ['min', 'max', 'mean', 'std'],
-        'APP_CREDIT_PERC': ['min', 'max', 'mean', 'std'],
-        'AMT_DOWN_PAYMENT': ['min', 'max', 'mean', 'std'],
-        'AMT_GOODS_PRICE': ['min', 'max', 'mean', 'std'],
-        'HOUR_APPR_PROCESS_START': ['min', 'max', 'mean', 'std'],
-        'RATE_DOWN_PAYMENT': ['min', 'max', 'mean', 'std'],
-        'DAYS_DECISION': ['min', 'max', 'mean', 'std'],
-        'CNT_PAYMENT': ['mean', 'sum', 'std'],
+        'AMT_ANNUITY': [ 'max', 'mean'],
+        'AMT_APPLICATION': [ 'max','mean'],
+        'AMT_CREDIT': [ 'max', 'mean'],
+        'APP_CREDIT_PERC': [ 'max', 'mean'],
+        'AMT_DOWN_PAYMENT': [ 'max', 'mean'],
+        'AMT_GOODS_PRICE': [ 'max', 'mean'],
+        'HOUR_APPR_PROCESS_START': [ 'max', 'mean'],
+        'RATE_DOWN_PAYMENT': [ 'max', 'mean'],
+        'DAYS_DECISION': [ 'max', 'mean'],
+        'CNT_PAYMENT': ['mean', 'sum'],
     }
     # Previous applications categorical features
     cat_aggregations = {}
@@ -249,7 +249,6 @@ def previous_applications(dataDir, nan_as_category = True):
     # Previous Applications: Approved Applications - only numerical features
     approved = prev[prev['NAME_CONTRACT_STATUS_Approved'] == 1]
     approved_agg = approved.groupby('SK_ID_CURR').agg(num_aggregations)
-    cols = approved_agg.columns.tolist()
     approved_agg.columns = pd.Index(['APPROVED_' + e[0] + "_" + e[1].upper() for e in approved_agg.columns.tolist()])
     prev_agg = prev_agg.join(approved_agg, how='left', on='SK_ID_CURR')
     # Previous Applications: Refused Applications - only numerical features
@@ -258,10 +257,6 @@ def previous_applications(dataDir, nan_as_category = True):
     refused_agg.columns = pd.Index(['REFUSED_' + e[0] + "_" + e[1].upper() for e in refused_agg.columns.tolist()])
     prev_agg = prev_agg.join(refused_agg, how='left', on='SK_ID_CURR')
     del refused, refused_agg, approved, approved_agg, prev
-    
-    for e in cols:
-        prev_agg['NEW_RATIO_PREV_' + e[0] + "_" + e[1].upper()] = prev_agg['APPROVED_' + e[0] + "_" + e[1].upper()] / prev_agg['REFUSED_' + e[0] + "_" + e[1].upper()]
-    
     gc.collect()
     return prev_agg
 
@@ -301,13 +296,13 @@ def installments_payments(dataDir, nan_as_category = True):
     # Features: Perform aggregations
     aggregations = {
         'NUM_INSTALMENT_VERSION': ['nunique'],
-        'DPD': ['max', 'mean', 'sum'],
-        'DBD': ['max', 'mean', 'sum'],
-        'PAYMENT_PERC': ['max', 'mean', 'sum', 'var'],
-        'PAYMENT_DIFF': ['max', 'mean', 'sum', 'var'],
-        'AMT_INSTALMENT': ['max', 'mean', 'sum'],
-        'AMT_PAYMENT': ['min', 'max', 'mean', 'sum'],
-        'DAYS_ENTRY_PAYMENT': ['max', 'mean', 'sum']
+        'DPD': ['max', 'mean', 'sum','min','std' ],
+        'DBD': ['max', 'mean', 'sum','min','std'],
+        'PAYMENT_PERC': [ 'max','mean',  'var','min','std'],
+        'PAYMENT_DIFF': [ 'max','mean', 'var','min','std'],
+        'AMT_INSTALMENT': ['max', 'mean', 'sum','min','std'],
+        'AMT_PAYMENT': ['min', 'max', 'mean', 'sum','std'],
+        'DAYS_ENTRY_PAYMENT': ['max', 'mean', 'sum','std']
     }
     for cat in cat_cols:
         aggregations[cat] = ['mean']
@@ -325,7 +320,7 @@ def credit_card_balance(dataDir, nan_as_category = True):
     cc, cat_cols = one_hot_encoder(cc, nan_as_category= True)
     # General aggregations
     cc.drop(['SK_ID_PREV'], axis= 1, inplace = True)
-    cc_agg = cc.groupby('SK_ID_CURR').agg(['min', 'max', 'mean', 'sum', 'var'])
+    cc_agg = cc.groupby('SK_ID_CURR').agg([ 'max', 'mean', 'sum', 'var'])
     cc_agg.columns = pd.Index(['CC_' + e[0] + "_" + e[1].upper() for e in cc_agg.columns.tolist()])
     # Count credit card lines
     cc_agg['CC_COUNT'] = cc.groupby('SK_ID_CURR').size()
