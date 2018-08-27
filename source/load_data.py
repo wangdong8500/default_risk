@@ -49,3 +49,4 @@ def load_data(dataDir):
             gc.collect()
         df.to_csv('full_data.csv', index= False)
         return df
+    
